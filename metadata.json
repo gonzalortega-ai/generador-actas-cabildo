@@ -1,0 +1,5 @@
+
+{
+  "name": "Generador de Actas de Cabildo",
+  "description": "Una aplicación web para generar actas de cabildo utilizando plantillas y la IA de Gemini, con exportación a formato .docx."
+}
