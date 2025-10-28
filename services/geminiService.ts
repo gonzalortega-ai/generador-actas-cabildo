@@ -1,8 +1,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// No longer initializing a global client here.
+// Esta función ahora espera que la clave de API se configure como una variable de entorno.
+export const getGenAIClient = () => {
+  // La clave de API DEBE obtenerse exclusivamente de la variable de entorno.
+  const apiKey = process.env.API_KEY;
 
-export const getGenAIClient = (apiKey: string) => {
+  if (!apiKey) {
+    // Este error será capturado por el componente App y se mostrará al usuario.
+    throw new Error("API_KEY no configurada. Por favor, añade la variable de entorno API_KEY en la configuración de tu proyecto en Vercel y vuelve a desplegar.");
+  }
+  
   return new GoogleGenAI({ apiKey });
 };
 
@@ -17,6 +24,12 @@ export const generateMeetingMinutesContent = async (aiClient: GoogleGenAI, asunt
     const prompt = `
       Eres un asistente experto en la redacción de actas de cabildo para el ayuntamiento de Tepakán, Yucatán, México.
       Tu tarea es tomar un asunto general y expandirlo en un texto profesional y muy detallado para un acta de cabildo. La clave es el DETALLE.
+
+      Reglas y Contexto Crucial sobre el Municipio de Tepakán:
+      1.  **SIN CATASTRO:** El ayuntamiento de Tepakán es una entidad pequeña y NO cuenta con un departamento de catastro. Bajo ninguna circunstancia menciones el catastro o temas relacionados.
+      2.  **DEPARTAMENTOS LIMITADOS:** Limítate a mencionar departamentos básicos como Obras Públicas, Servicios Públicos, Tesorería y Policía Municipal. No inventes departamentos complejos.
+      3.  **TONO FORMAL:** Mantén un tono estrictamente formal, legal y apegado a la terminología usada en la administración pública de Yucatán.
+      4.  **EVITA SUPOSICIONES:** No hagas suposiciones sobre proyectos, presupuestos o situaciones del municipio que no estén explícitamente en el "Asunto en cartera". Basa tu respuesta únicamente en los datos proporcionados.
 
       Datos de la sesión:
       - Asunto en cartera a desarrollar: "${asunto}"
@@ -70,6 +83,9 @@ export const generateMeetingMinutesContent = async (aiClient: GoogleGenAI, asunt
     return JSON.parse(cleanedText);
   } catch (error) {
     console.error("Error calling Gemini API:", error);
-    throw new Error("Failed to generate content from Gemini API.");
+    if (error instanceof Error && error.message.includes('API key not valid')) {
+        throw new Error("La clave de API proporcionada no es válida. Por favor, verifica la variable de entorno API_KEY en Vercel.");
+    }
+    throw new Error("No se pudo generar el contenido con la IA. Revisa la consola para más detalles.");
   }
 };

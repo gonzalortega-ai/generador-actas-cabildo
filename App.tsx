@@ -7,11 +7,10 @@ import { Button } from './components/Button';
 import { DownloadIcon, SparklesIcon, PencilIcon } from './components/Icons';
 import { SelectField } from './components/SelectField';
 import { InfoBanner } from './components/InfoBanner';
-import { ApiKeyModal } from './components/ApiKeyModal';
 
 // --- Funciones de conversión a letras ---
 const unidades = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
-const decenas = ['', 'diez', 'veinte', 'treinta', 'cuarenta', 'cinquenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
+const decenas = ['', 'diez', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
 const especiales = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve'];
 const centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
 const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
@@ -144,15 +143,6 @@ const App: React.FC = () => {
   const [actaType, setActaType] = useState<ActaType>('general');
   const [cuentaPublicaMonth, setCuentaPublicaMonth] = useState(new Date().getMonth());
   const [cuentaPublicaYear, setCuentaPublicaYear] = useState(new Date().getFullYear());
-  const [apiKey, setApiKey] = useState(process.env.API_KEY || '');
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
-
-  useEffect(() => {
-    if (!apiKey) {
-      setIsApiKeyModalOpen(true);
-    }
-  }, [apiKey]);
-
 
   const generateCuentaPublicaContent = useCallback((monthIndex: number, year: number) => {
     const monthName = mesesOptions[monthIndex].toUpperCase();
@@ -224,12 +214,6 @@ const App: React.FC = () => {
   }, []);
 
   const handleGenerate = async () => {
-    if (actaType === 'general' && !apiKey) {
-      setError('Se necesita una clave de API de Google para usar la función de IA. Por favor, ingrésala.');
-      setIsApiKeyModalOpen(true);
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
     setGeneratedContent('');
@@ -255,7 +239,9 @@ const App: React.FC = () => {
           ''
         );
       } else {
-        const aiClient = getGenAIClient(apiKey);
+        // La inicialización del cliente de IA ahora está dentro del bloque try/catch.
+        // Si getGenAIClient falla (por falta de API Key), el error se captura abajo.
+        const aiClient = getGenAIClient();
         const generatedParts: GeneratedParts = await generateMeetingMinutesContent(aiClient, asuntoEnCartera, attendingList);
         palabras_presidente = generatedParts.palabras_presidente;
         asunto_final = generatedParts.asunto_mejorado;
@@ -292,7 +278,12 @@ const App: React.FC = () => {
       setGeneratedContent(finalContent);
     } catch (err) {
       console.error(err);
-      setError('Hubo un error al generar el contenido. Por favor, revisa la consola para más detalles.');
+      if (err instanceof Error) {
+        // Aquí se mostrará el mensaje de error útil de geminiService.ts
+        setError(err.message);
+      } else {
+        setError('Ocurrió un error inesperado. Por favor, inténtalo de nuevo.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -304,26 +295,11 @@ const App: React.FC = () => {
       generateDocx(generatedContent, attendees, `Acta_Cabildo_Tepakan_${formattedDate}.docx`);
     }
   };
-  
-  const handleApiKeySubmit = (key: string) => {
-    if (key) {
-      setApiKey(key);
-      setIsApiKeyModalOpen(false);
-      setError(null);
-    } else {
-      setError('La clave de API no puede estar vacía.');
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800">
       <Header />
       <main className="container mx-auto p-4 md:p-8">
-        <ApiKeyModal
-            isOpen={isApiKeyModalOpen}
-            onClose={() => setIsApiKeyModalOpen(false)}
-            onSubmit={handleApiKeySubmit}
-        />
         <InfoBanner />
         <div className="space-y-8">
           
@@ -428,13 +404,13 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-bold text-slate-700 border-b pb-2 mb-4">2. Generar y Previsualizar Acta</h2>
             
             <div className="mb-6">
-              <Button onClick={handleGenerate} disabled={isLoading || (actaType === 'general' && !apiKey)}>
+              <Button onClick={handleGenerate} disabled={isLoading}>
                 {isLoading ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> : <SparklesIcon className="w-5 h-5 mr-2" />}
                 {isLoading ? 'Generando...' : (actaType === 'cuentaPublica' ? 'Generar Acta' : 'Generar Acta con IA')}
               </Button>
             </div>
 
-            {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert"><p>{error}</p></div>}
+            {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert"><p className="font-bold">Error</p><p>{error}</p></div>}
             
             <div className="bg-slate-50 p-4 rounded-lg min-h-[600px] overflow-y-auto border">
               {generatedContent ? (
