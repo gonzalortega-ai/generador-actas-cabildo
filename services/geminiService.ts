@@ -1,13 +1,10 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Esta función ahora espera que la clave de API se configure como una variable de entorno.
-export const getGenAIClient = () => {
-  // La clave de API DEBE obtenerse exclusivamente de la variable de entorno.
-  const apiKey = process.env.API_KEY;
-
-  if (!apiKey) {
+// Esta función ahora espera la clave API como un argumento.
+export const getGenAIClient = (apiKey: string) => {
+  if (!apiKey || apiKey.trim() === '') {
     // Este error será capturado por el componente App y se mostrará al usuario.
-    throw new Error("API_KEY no configurada. Por favor, añade la variable de entorno API_KEY en la configuración de tu proyecto en Vercel y vuelve a desplegar.");
+    throw new Error("Clave de API de Gemini no proporcionada. Por favor, introdúcela en el campo de configuración.");
   }
   
   return new GoogleGenAI({ apiKey });
@@ -84,7 +81,7 @@ export const generateMeetingMinutesContent = async (aiClient: GoogleGenAI, asunt
   } catch (error) {
     console.error("Error calling Gemini API:", error);
     if (error instanceof Error && error.message.includes('API key not valid')) {
-        throw new Error("La clave de API proporcionada no es válida. Por favor, verifica la variable de entorno API_KEY en Vercel.");
+        throw new Error("La clave de API proporcionada no es válida. Por favor, revísala y guárdala de nuevo.");
     }
     throw new Error("No se pudo generar el contenido con la IA. Revisa la consola para más detalles.");
   }

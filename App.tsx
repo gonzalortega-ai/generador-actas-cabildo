@@ -1,11 +1,10 @@
-// Pequeño cambio para forzar el despliegue
-// import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { getGenAIClient, generateMeetingMinutesContent, GeneratedParts } from './services/geminiService';
 import { generateDocx } from './utils/docxGenerator';
 import { Header } from './components/Header';
 import { InputField } from './components/InputField';
 import { Button } from './components/Button';
-import { DownloadIcon, SparklesIcon, PencilIcon } from './components/Icons';
+import { DownloadIcon, SparklesIcon, PencilIcon, InfoIcon } from './components/Icons';
 import { SelectField } from './components/SelectField';
 import { InfoBanner } from './components/InfoBanner';
 
@@ -128,6 +127,17 @@ const mesesOptions = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Ju
 type ActaType = 'general' | 'cuentaPublica';
 
 const App: React.FC = () => {
+  const [apiKey, setApiKey] = useState('');
+  const [apiKeySaved, setApiKeySaved] = useState(false);
+
+  useEffect(() => {
+    const savedApiKey = localStorage.getItem('gemini-api-key');
+    if (savedApiKey) {
+      setApiKey(savedApiKey);
+      setApiKeySaved(true);
+    }
+  }, []);
+
   const [formData, setFormData] = useState({
     fecha: new Date().toISOString().split('T')[0], // YYYY-MM-DD
     tipo_sesion: 'ORDINARIA',
@@ -144,6 +154,11 @@ const App: React.FC = () => {
   const [actaType, setActaType] = useState<ActaType>('general');
   const [cuentaPublicaMonth, setCuentaPublicaMonth] = useState(new Date().getMonth());
   const [cuentaPublicaYear, setCuentaPublicaYear] = useState(new Date().getFullYear());
+
+  const handleSaveApiKey = () => {
+    localStorage.setItem('gemini-api-key', apiKey);
+    setApiKeySaved(true);
+  };
 
   const generateCuentaPublicaContent = useCallback((monthIndex: number, year: number) => {
     const monthName = mesesOptions[monthIndex].toUpperCase();
@@ -240,9 +255,7 @@ const App: React.FC = () => {
           ''
         );
       } else {
-        // La inicialización del cliente de IA ahora está dentro del bloque try/catch.
-        // Si getGenAIClient falla (por falta de API Key), el error se captura abajo.
-        const aiClient = getGenAIClient();
+        const aiClient = getGenAIClient(apiKey);
         const generatedParts: GeneratedParts = await generateMeetingMinutesContent(aiClient, asuntoEnCartera, attendingList);
         palabras_presidente = generatedParts.palabras_presidente;
         asunto_final = generatedParts.asunto_mejorado;
@@ -280,7 +293,6 @@ const App: React.FC = () => {
     } catch (err) {
       console.error(err);
       if (err instanceof Error) {
-        // Aquí se mostrará el mensaje de error útil de geminiService.ts
         setError(err.message);
       } else {
         setError('Ocurrió un error inesperado. Por favor, inténtalo de nuevo.');
@@ -305,7 +317,33 @@ const App: React.FC = () => {
         <div className="space-y-8">
           
           <div className="bg-white p-6 rounded-xl shadow-lg space-y-6">
-            <h2 className="text-2xl font-bold text-slate-700 border-b pb-2">1. Datos de la Sesión</h2>
+            <h2 className="text-2xl font-bold text-slate-700 border-b pb-2">Configuración y Datos de la Sesión</h2>
+            
+            <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-md">
+                <h3 className="font-bold text-amber-800 flex items-center"><InfoIcon className="w-5 h-5 mr-2" />Configuración de API Key de Gemini</h3>
+                <p className="text-sm text-amber-700 mt-1">
+                    Para usar la función de IA, introduce tu clave de API de Google Gemini. La guardaremos en tu navegador para que no tengas que volver a introducirla.
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                    <InputField 
+                        label="" 
+                        name="apiKey" 
+                        value={apiKey} 
+                        onChange={(e) => {
+                            setApiKey(e.target.value);
+                            setApiKeySaved(false);
+                        }}
+                        type="text"
+                        placeholder="Pega tu clave de API aquí"
+                        className="flex-grow"
+                    />
+                    <Button onClick={handleSaveApiKey} disabled={!apiKey} className="py-2 px-4 text-sm">
+                        {apiKeySaved ? 'Guardada' : 'Guardar'}
+                    </Button>
+                </div>
+                 {apiKeySaved && <p className="text-xs text-green-600 mt-1">¡Clave guardada correctamente en tu navegador!</p>}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <InputField label="Fecha" name="fecha" value={formData.fecha} onChange={handleInputChange} type="date" />
               <SelectField
@@ -346,11 +384,11 @@ const App: React.FC = () => {
                 <div className="flex gap-4">
                     <label className="flex items-center gap-2">
                         <input type="radio" name="actaType" value="general" checked={actaType === 'general'} onChange={() => setActaType('general')} className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"/>
-                        <span>Asunto General</span>
+                        <span>Asunto General (Usa IA)</span>
                     </label>
                     <label className="flex items-center gap-2">
                         <input type="radio" name="actaType" value="cuentaPublica" checked={actaType === 'cuentaPublica'} onChange={() => setActaType('cuentaPublica')} className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"/>
-                        <span>Cuenta Pública</span>
+                        <span>Cuenta Pública (Automático)</span>
                     </label>
                 </div>
             </div>
@@ -405,10 +443,15 @@ const App: React.FC = () => {
             <h2 className="text-2xl font-bold text-slate-700 border-b pb-2 mb-4">2. Generar y Previsualizar Acta</h2>
             
             <div className="mb-6">
-              <Button onClick={handleGenerate} disabled={isLoading}>
+              <Button onClick={handleGenerate} disabled={isLoading || (actaType === 'general' && !apiKeySaved)}>
                 {isLoading ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> : <SparklesIcon className="w-5 h-5 mr-2" />}
                 {isLoading ? 'Generando...' : (actaType === 'cuentaPublica' ? 'Generar Acta' : 'Generar Acta con IA')}
               </Button>
+               {actaType === 'general' && !apiKeySaved && (
+                <p className="text-xs text-red-600 mt-2">
+                  Por favor, guarda tu clave de API en la sección de configuración para poder generar actas con IA.
+                </p>
+              )}
             </div>
 
             {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert"><p className="font-bold">Error</p><p>{error}</p></div>}

@@ -1,9 +1,4 @@
-import React from 'react';
-
-// Este componente se deja intencionalmente vacío para deshabilitar el modal de clave de API.
-// La clave de API debe configurarse a través de variables de entorno en Vercel.
-const ApiKeyModal: React.FC = () => {
-  return null;
-};
-
-export default ApiKeyModal;
+// Este componente ya no se utiliza.
+// La lógica para gestionar la clave de API ahora reside directamente en App.tsx
+// y utiliza localStorage para la persistencia, eliminando la necesidad de un modal.
+export {};
