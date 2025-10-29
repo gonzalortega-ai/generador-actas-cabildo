@@ -1,10 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { getGenAIClient, generateMeetingMinutesContent, GeneratedParts } from './services/geminiService';
+import { getGenAIClient, generateMeetingMinutesContent, GeneratedParts, verifyApiKey } from './services/geminiService';
 import { generateDocx } from './utils/docxGenerator';
 import { Header } from './components/Header';
 import { InputField } from './components/InputField';
 import { Button } from './components/Button';
-import { DownloadIcon, SparklesIcon, PencilIcon, InfoIcon } from './components/Icons';
+import { DownloadIcon, SparklesIcon, PencilIcon, InfoIcon, CheckCircleIcon } from './components/Icons';
 import { SelectField } from './components/SelectField';
 import { InfoBanner } from './components/InfoBanner';
 
@@ -125,16 +125,21 @@ const initialAttendees = [
 const mesesOptions = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 type ActaType = 'general' | 'cuentaPublica';
+type ApiKeyStatus = 'idle' | 'verifying' | 'valid' | 'invalid';
 
 const App: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus>('idle');
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+
 
   useEffect(() => {
     const savedApiKey = localStorage.getItem('gemini-api-key');
     if (savedApiKey) {
       setApiKey(savedApiKey);
       setApiKeySaved(true);
+      setApiKeyStatus('valid');
     }
   }, []);
 
@@ -155,9 +160,25 @@ const App: React.FC = () => {
   const [cuentaPublicaMonth, setCuentaPublicaMonth] = useState(new Date().getMonth());
   const [cuentaPublicaYear, setCuentaPublicaYear] = useState(new Date().getFullYear());
 
-  const handleSaveApiKey = () => {
-    localStorage.setItem('gemini-api-key', apiKey);
-    setApiKeySaved(true);
+  const handleVerifyAndSaveApiKey = async () => {
+    if (!apiKey) return;
+    setApiKeyStatus('verifying');
+    setApiKeyError(null);
+    try {
+      await verifyApiKey(apiKey);
+      localStorage.setItem('gemini-api-key', apiKey);
+      setApiKeySaved(true);
+      setApiKeyStatus('valid');
+    } catch (err) {
+      localStorage.removeItem('gemini-api-key');
+      setApiKeySaved(false);
+      setApiKeyStatus('invalid');
+      if (err instanceof Error) {
+        setApiKeyError(err.message);
+      } else {
+        setApiKeyError('Ocurrió un error desconocido durante la verificación.');
+      }
+    }
   };
 
   const generateCuentaPublicaContent = useCallback((monthIndex: number, year: number) => {
@@ -293,7 +314,13 @@ const App: React.FC = () => {
     } catch (err) {
       console.error(err);
       if (err instanceof Error) {
-        setError(err.message);
+        if (err.message.includes("API key not valid")) {
+          setError("La clave de API guardada parece no ser válida. Por favor, verifícala de nuevo en la configuración.");
+          setApiKeyStatus('invalid');
+          setApiKeySaved(false);
+        } else {
+          setError(err.message);
+        }
       } else {
         setError('Ocurrió un error inesperado. Por favor, inténtalo de nuevo.');
       }
@@ -308,6 +335,67 @@ const App: React.FC = () => {
       generateDocx(generatedContent, attendees, `Acta_Cabildo_Tepakan_${formattedDate}.docx`);
     }
   };
+  
+  const ApiKeyInfoBox = () => {
+    const commonClasses = "p-4 rounded-md border-l-4 transition-colors duration-300";
+    
+    switch (apiKeyStatus) {
+      case 'valid':
+        return (
+          <div className={`${commonClasses} bg-green-50 border-green-500`}>
+            <h3 className="font-bold text-green-800 flex items-center"><CheckCircleIcon className="w-5 h-5 mr-2" />¡Clave Verificada y Guardada!</h3>
+            <p className="text-sm text-green-700 mt-1">
+              Tu clave de API está configurada correctamente. Ya puedes generar actas con IA.
+            </p>
+          </div>
+        );
+      case 'invalid':
+        return (
+          <div className={`${commonClasses} bg-red-50 border-red-500`}>
+             <h3 className="font-bold text-red-800 flex items-center"><InfoIcon className="w-5 h-5 mr-2" />Error en la Clave de API</h3>
+             <p className="text-sm text-red-700 mt-1">{apiKeyError}</p>
+             <ApiKeyInputArea />
+          </div>
+        );
+      default: // idle or verifying
+        return (
+            <div className={`${commonClasses} bg-amber-50 border-amber-400`}>
+                <h3 className="font-bold text-amber-800 flex items-center"><InfoIcon className="w-5 h-5 mr-2" />Configuración de API Key de Gemini</h3>
+                <p className="text-sm text-amber-700 mt-1">
+                    Para usar la función de IA, introduce tu clave de API de Google Gemini.
+                </p>
+                <ApiKeyInputArea />
+            </div>
+        );
+    }
+  };
+
+  const ApiKeyInputArea = () => (
+    <div className="mt-3 flex items-center gap-2">
+        <InputField 
+            label="" 
+            name="apiKey" 
+            value={apiKey} 
+            onChange={(e) => {
+                setApiKey(e.target.value);
+                setApiKeySaved(false);
+                setApiKeyStatus('idle');
+            }}
+            type="text"
+            placeholder="Pega tu clave de API aquí"
+            className="flex-grow"
+            disabled={apiKeyStatus === 'verifying'}
+        />
+        <Button onClick={handleVerifyAndSaveApiKey} disabled={!apiKey || apiKeyStatus === 'verifying'} className="py-2 px-4 text-sm w-40">
+            {apiKeyStatus === 'verifying' ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            ) : (
+              'Verificar y Guardar'
+            )}
+        </Button>
+    </div>
+  );
+
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800">
@@ -319,30 +407,7 @@ const App: React.FC = () => {
           <div className="bg-white p-6 rounded-xl shadow-lg space-y-6">
             <h2 className="text-2xl font-bold text-slate-700 border-b pb-2">Configuración y Datos de la Sesión</h2>
             
-            <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded-md">
-                <h3 className="font-bold text-amber-800 flex items-center"><InfoIcon className="w-5 h-5 mr-2" />Configuración de API Key de Gemini</h3>
-                <p className="text-sm text-amber-700 mt-1">
-                    Para usar la función de IA, introduce tu clave de API de Google Gemini. La guardaremos en tu navegador para que no tengas que volver a introducirla.
-                </p>
-                <div className="mt-3 flex items-center gap-2">
-                    <InputField 
-                        label="" 
-                        name="apiKey" 
-                        value={apiKey} 
-                        onChange={(e) => {
-                            setApiKey(e.target.value);
-                            setApiKeySaved(false);
-                        }}
-                        type="text"
-                        placeholder="Pega tu clave de API aquí"
-                        className="flex-grow"
-                    />
-                    <Button onClick={handleSaveApiKey} disabled={!apiKey} className="py-2 px-4 text-sm">
-                        {apiKeySaved ? 'Guardada' : 'Guardar'}
-                    </Button>
-                </div>
-                 {apiKeySaved && <p className="text-xs text-green-600 mt-1">¡Clave guardada correctamente en tu navegador!</p>}
-            </div>
+            <ApiKeyInfoBox />
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <InputField label="Fecha" name="fecha" value={formData.fecha} onChange={handleInputChange} type="date" />
@@ -449,7 +514,7 @@ const App: React.FC = () => {
               </Button>
                {actaType === 'general' && !apiKeySaved && (
                 <p className="text-xs text-red-600 mt-2">
-                  Por favor, guarda tu clave de API en la sección de configuración para poder generar actas con IA.
+                  Por favor, verifica y guarda tu clave de API en la sección de configuración para poder generar actas con IA.
                 </p>
               )}
             </div>

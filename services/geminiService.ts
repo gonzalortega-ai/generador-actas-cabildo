@@ -10,6 +10,26 @@ export const getGenAIClient = (apiKey: string) => {
   return new GoogleGenAI({ apiKey });
 };
 
+// Nueva función para verificar la validez de una clave de API
+export const verifyApiKey = async (apiKey: string): Promise<boolean> => {
+  if (!apiKey) {
+    throw new Error("La clave de API no puede estar vacía.");
+  }
+  try {
+    const aiClient = new GoogleGenAI({ apiKey });
+    // Hacemos una llamada muy simple y de bajo costo para verificar la clave
+    await aiClient.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: "test",
+    });
+    return true;
+  } catch (error) {
+     console.error("API Key validation error:", error);
+     throw new Error("La clave de API proporcionada no es válida o no tiene los permisos necesarios.");
+  }
+};
+
+
 export type GeneratedParts = {
   asunto_mejorado: string;
   palabras_presidente: string;
@@ -76,12 +96,13 @@ export const generateMeetingMinutesContent = async (aiClient: GoogleGenAI, asunt
     });
 
     const text = response.text.trim();
+    // A veces, la API puede devolver el JSON dentro de un bloque de código markdown.
     const cleanedText = text.replace(/^```json\s*|```$/g, '');
     return JSON.parse(cleanedText);
   } catch (error) {
     console.error("Error calling Gemini API:", error);
-    if (error instanceof Error && error.message.includes('API key not valid')) {
-        throw new Error("La clave de API proporcionada no es válida. Por favor, revísala y guárdala de nuevo.");
+    if (error instanceof Error && (error.message.includes('API key not valid') || error.message.includes('API_KEY_INVALID'))) {
+        throw new Error("API key not valid. Please verify your API key in the configuration.");
     }
     throw new Error("No se pudo generar el contenido con la IA. Revisa la consola para más detalles.");
   }
